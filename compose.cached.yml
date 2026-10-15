@@ -1,0 +1,4 @@
+# 本机已有 MySQL 9.6 时使用，代码包含 fresh-schema 检查点兼容适配。
+services:
+  mysql:
+    image: mysql:9.6.0

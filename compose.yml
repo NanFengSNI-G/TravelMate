@@ -1,0 +1,23 @@
+name: travelmate-tutorial
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: tutorial_root_local
+      MYSQL_DATABASE: travelmate
+      MYSQL_USER: travelmate
+      MYSQL_PASSWORD: travelmate_local
+    ports: ["127.0.0.1:13316:3306"]
+    volumes: ["mysql_data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -utravelmate -e 'SELECT 1' travelmate"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    ports: ["127.0.0.1:16333:6333"]
+    volumes: ["qdrant_data:/qdrant/storage"]
+volumes:
+  mysql_data:
+  qdrant_data:
