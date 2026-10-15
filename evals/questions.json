@@ -1,0 +1,422 @@
+[
+  {
+    "id": "q01",
+    "question": "取消费是多少？",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q02",
+    "question": "不去了要扣多少钱？",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q03",
+    "question": "退款是否收费？",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q04",
+    "question": "取消需要付费吗？",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q05",
+    "question": "取消费用条款",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q06",
+    "question": "退订扣款规则",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q07",
+    "question": "取消订单的收费标准",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q08",
+    "question": "不出行了有什么费用",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q09",
+    "question": "请解释取消金额",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q10",
+    "question": "查一下取消政策",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q11",
+    "question": "取消时的费用是多少",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q12",
+    "question": "退订是否免费",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q13",
+    "question": "取消费用与适用条件",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q14",
+    "question": "我想了解退订收费",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q15",
+    "question": "请查取消条款原文",
+    "supplier": "演示航空",
+    "product": "economy",
+    "expected_section": "经济舱取消"
+  },
+  {
+    "id": "q16",
+    "question": "取消费是多少？",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q17",
+    "question": "不去了要扣多少钱？",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q18",
+    "question": "退款是否收费？",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q19",
+    "question": "取消需要付费吗？",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q20",
+    "question": "取消费用条款",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q21",
+    "question": "退订扣款规则",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q22",
+    "question": "取消订单的收费标准",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q23",
+    "question": "不出行了有什么费用",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q24",
+    "question": "请解释取消金额",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q25",
+    "question": "查一下取消政策",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q26",
+    "question": "取消时的费用是多少",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q27",
+    "question": "退订是否免费",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q28",
+    "question": "取消费用与适用条件",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q29",
+    "question": "我想了解退订收费",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q30",
+    "question": "请查取消条款原文",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "expected_section": "标准房取消"
+  },
+  {
+    "id": "q31",
+    "question": "取消费是多少？",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q32",
+    "question": "不去了要扣多少钱？",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q33",
+    "question": "退款是否收费？",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q34",
+    "question": "取消需要付费吗？",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q35",
+    "question": "取消费用条款",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q36",
+    "question": "退订扣款规则",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q37",
+    "question": "取消订单的收费标准",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q38",
+    "question": "不出行了有什么费用",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q39",
+    "question": "请解释取消金额",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q40",
+    "question": "查一下取消政策",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q41",
+    "question": "取消时的费用是多少",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q42",
+    "question": "退订是否免费",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q43",
+    "question": "取消费用与适用条件",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q44",
+    "question": "我想了解退订收费",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q45",
+    "question": "请查取消条款原文",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "expected_section": "灵活房取消"
+  },
+  {
+    "id": "q46",
+    "question": "取消费是多少？",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q47",
+    "question": "不去了要扣多少钱？",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q48",
+    "question": "退款是否收费？",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q49",
+    "question": "取消需要付费吗？",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q50",
+    "question": "取消费用条款",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q51",
+    "question": "退订扣款规则",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q52",
+    "question": "取消订单的收费标准",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q53",
+    "question": "不出行了有什么费用",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q54",
+    "question": "请解释取消金额",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q55",
+    "question": "查一下取消政策",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q56",
+    "question": "取消时的费用是多少",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q57",
+    "question": "退订是否免费",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q58",
+    "question": "取消费用与适用条件",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q59",
+    "question": "我想了解退订收费",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  },
+  {
+    "id": "q60",
+    "question": "请查取消条款原文",
+    "supplier": "无资料供应商",
+    "product": "unknown",
+    "expected_section": null
+  }
+]

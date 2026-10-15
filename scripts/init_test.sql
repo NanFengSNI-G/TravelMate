@@ -1,0 +1,3 @@
+USE travelmate;
+SELECT DATABASE(), VERSION();
+SHOW TABLES;
