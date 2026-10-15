@@ -34,8 +34,18 @@ class Task(BaseModel):
 
 class Request(BaseModel):
     intent: Literal[
-        "policy", "search", "plan", "book", "change", "cancel", "support", "repair"
+        "policy",
+        "search",
+        "plan",
+        "book",
+        "change",
+        "cancel",
+        "support",
+        "repair",
+        "admin_write",
     ]
+    # 仅管理员专用 HTTP 入口可提交；普通消息入口禁止此意图。
+    admin_action: dict | None = None
     question: str = "取消政策是什么？"
     departure: str = "北京"
     destination: str = "上海"

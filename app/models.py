@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import String, Integer, JSON, Text, UniqueConstraint, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+
 def uid():
     return str(uuid.uuid4())
 

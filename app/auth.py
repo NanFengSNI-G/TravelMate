@@ -1,9 +1,8 @@
-import base64
 import hashlib
 import hmac
-import json
 import secrets
 import time
+import jwt
 from app.config import settings
 
 
@@ -21,23 +20,21 @@ def password_ok(password: str, stored: str):
 
 
 def token(user_id: str):
-    data = base64.urlsafe_b64encode(
-        json.dumps({"id": user_id, "exp": int(time.time()) + 3600}).encode()
-    ).decode()
-    sig = hmac.new(
-        settings().auth_secret.encode(), data.encode(), hashlib.sha256
-    ).hexdigest()
-    return f"{data}.{sig}"
+    return jwt.encode(
+        {"sub": user_id, "exp": int(time.time()) + 3600},
+        settings().auth_secret,
+        algorithm="HS256",
+    )
 
 
 def decode(value: str):
-    data, sig = value.rsplit(".", 1)
-    expected = hmac.new(
-        settings().auth_secret.encode(), data.encode(), hashlib.sha256
-    ).hexdigest()
-    if not hmac.compare_digest(expected, sig):
-        raise ValueError("登录凭证无效")
-    payload = json.loads(base64.urlsafe_b64decode(data))
-    if payload["exp"] < time.time():
-        raise ValueError("登录已过期")
-    return payload["id"]
+    try:
+        payload = jwt.decode(
+            value,
+            settings().auth_secret,
+            algorithms=["HS256"],
+            options={"require": ["sub", "exp"]},
+        )
+        return payload["sub"]
+    except jwt.InvalidTokenError as exc:
+        raise ValueError("登录凭证无效或已过期") from exc

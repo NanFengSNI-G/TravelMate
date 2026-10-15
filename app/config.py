@@ -20,11 +20,9 @@ class Settings(BaseSettings):
     model_api_key: str = ""
     embed_model: str = "text-embedding-v3"
     embed_dim: int = 1024
-    rerank_mode: str = "lexical"
-    rerank_url: str = (
-        "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
-    )
+    rerank_mode: str = "none"
     rerank_model: str = "gte-rerank-v2"
+    context_max_tokens: int = 6000
     artifact_dir: Path = Path("artifacts")
 
 

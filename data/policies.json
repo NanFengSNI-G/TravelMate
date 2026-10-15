@@ -1,0 +1,6 @@
+[
+ {"document":"airline","supplier":"演示航空","product":"economy","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":10000},"file":"airline.md"},
+ {"document":"hotel-standard","supplier":"演示酒店","product":"standard","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":5000},"file":"hotel-standard.md"},
+ {"document":"hotel-flexible","supplier":"演示酒店","product":"flexible","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":0},"file":"hotel-flexible.md"},
+ {"document":"destination","supplier":"目的地指南","product":"上海","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":0},"file":"destination.md"}
+]
