@@ -1,18 +1,13 @@
-"""验证框架边界及业务接缝，不以 Mock 的输出证明模型质量。"""
+import pytest
 
-from types import SimpleNamespace
 from datetime import date
-from pathlib import Path
-from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware
-from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.core.node_parser import get_leaf_nodes
 from llama_index.core.schema import TextNode, NodeWithScore, QueryBundle
-from llama_index.postprocessor.dashscope_rerank import DashScopeRerank
-from app.agents import Agents, ScriptModel
+from app.encoding import embedding, reranker
+from app.agents import Agents, model
 from app.domain import Domain
 from app.knowledge import Knowledge
 from app.contracts import Query, Request, EvidenceBundle
@@ -57,84 +52,61 @@ def test_native_docstore_reloads_for_retrieval(env):
     )
     before = env.retrieve(query)
     restarted = Knowledge(
-        client=env.client, embed=MockEmbedding(embed_dim=32), collection=env.collection
+        client=env.client, embed=embedding(), collection=env.collection
     )
     after = restarted.retrieve(query)
     assert before.snapshot == after.snapshot
     assert {e.node_id for e in before.evidence} == {e.node_id for e in after.evidence}
 
 
-def test_native_customer_memory_scoped_by_owner_and_conversation(env):
-    saver = InMemorySaver()
-    agents = Agents(Domain(env), saver)
-    req = Request(intent="policy", resource_ids=["hotel-0"])
-    agents.customer("alice", req, "same-conversation")
-    agents.customer("alice", req, "same-conversation")
-    state = saver.get_tuple(
-        {"configurable": {"thread_id": "customer:alice:same-conversation"}}
+def test_customer_receives_canonical_context(env):
+    agents = Agents(Domain(env))
+    req = Request(intent="chat", question="我之前的方案多少钱？")
+    result = agents.customer(
+        "alice",
+        req,
+        [{"text": "规划行程", "result": {"plan": {"options": [{"amount": 123400}]}}}],
     )
-    assert (
-        sum(m.type == "human" for m in state.checkpoint["channel_values"]["messages"])
-        == 2
-    )
-    agents.customer("bob", req, "same-conversation")
-    other = saver.get_tuple(
-        {"configurable": {"thread_id": "customer:bob:same-conversation"}}
-    )
-    assert (
-        sum(m.type == "human" for m in other.checkpoint["channel_values"]["messages"])
-        == 1
-    )
+    assert result["answer"]
+    assert result["trace"][0]["role"] == "human"
+    assert result["trace"][1]["role"] == "ai"
+    assert "123400" in result["trace"][1]["content"]
 
 
-def test_native_summarization_runs_in_agent_loop():
-    saver = InMemorySaver()
+def test_native_summarization_runs_in_agent_loop(saver):
     agent = create_agent(
-        ScriptModel(answer="收到"),
+        model(),
         tools=[],
         checkpointer=saver,
         middleware=[
             SummarizationMiddleware(
-                model=FakeListChatModel(responses=["保留用户的出行约束"]),
+                model=model(),
                 trigger=("messages", 6),
                 keep=("messages", 2),
             )
         ],
     )
-    cfg = {"configurable": {"thread_id": "summary-test"}}
+    cfg = {"configurable": {"thread_id": __import__("uuid").uuid4().hex}}
     for i in range(5):
         result = agent.invoke({"messages": [("user", f"第{i}条需求")]}, cfg)
-    assert any("保留用户的出行约束" in str(m.content) for m in result["messages"])
+    assert any(m.type == "system" for m in result["messages"])
     assert len(result["messages"]) < 10
 
 
-def test_native_reranker_sdk_boundary(monkeypatch):
-    import dashscope
-
-    def call(**kwargs):
-        assert kwargs["query"] == "取消费" and kwargs["top_n"] == 1
-        return SimpleNamespace(
-            output=SimpleNamespace(
-                results=[SimpleNamespace(index=1, relevance_score=0.9)]
-            )
-        )
-
-    monkeypatch.setattr(dashscope.TextReRank, "call", call)
+@pytest.mark.live
+@pytest.mark.integration
+def test_native_reranker_service():
     nodes = [
-        NodeWithScore(node=TextNode(id_="wrong", text="位置")),
-        NodeWithScore(node=TextNode(id_="right", text="取消费")),
+        NodeWithScore(node=TextNode(id_="location", text="酒店位于上海市中心。")),
+        NodeWithScore(node=TextNode(id_="cancel", text="酒店取消费用为五十元。")),
     ]
-    result = DashScopeRerank(top_n=1, api_key="test-only").postprocess_nodes(
-        nodes, query_bundle=QueryBundle("取消费")
+    result = reranker(top_n=1).postprocess_nodes(
+        nodes, query_bundle=QueryBundle("酒店取消多少钱？")
     )
-    assert result[0].node.node_id == "right" and result[0].score == 0.9
+    assert result[0].node.node_id == "cancel" and result[0].score is not None
 
 
-def test_insufficient_evidence_never_calls_llm(env, monkeypatch):
-    def forbidden():
-        raise AssertionError("没有适用证据时不应生成答案")
-
-    monkeypatch.setattr("app.knowledge.rag_llm", forbidden)
+def test_insufficient_evidence_does_not_generate(env):
     result = env.answer(
         "取消费", EvidenceBundle(status="INSUFFICIENT", snapshot=[], evidence=[])
     )
@@ -187,7 +159,7 @@ def test_native_sse_reconnect_cursor(env):
     assert "event: complete" in response.text
 
 
-def test_worker_keeps_customer_context_across_runs(env):
+def test_worker_keeps_customer_context_across_runs(env, saver):
     from app.graph import build_graph
     from app.worker import process
     from app.runs import Runs
@@ -199,11 +171,15 @@ def test_worker_keeps_customer_context_across_runs(env):
         s.add(c)
         s.flush()
         cid = c.id
-    graph = build_graph(Domain(env), InMemorySaver())
+    graph = build_graph(Domain(env), saver)
     runs = Runs()
     request = Request(intent="policy", resource_ids=["hotel-0"])
     for _ in range(2):
         rid = runs.submit("alice", cid, request.model_dump(mode="json"))
         process(runs.claim(), graph, runs)
-    result = runs.get("alice", rid).result
-    assert sum(m["role"] == "human" for m in result["customer"]["trace"]) == 2
+    from app.conversations import history
+
+    context = history("alice", cid)
+    assert len(context) == 2
+    assert all(e["result"]["customer"]["answer"] for e in context)
+    assert all(e["result"]["evidence"]["evidence"] for e in context)

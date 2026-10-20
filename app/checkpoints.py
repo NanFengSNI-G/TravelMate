@@ -25,8 +25,8 @@ class HashCursor:
         return getattr(self.cursor, name)
 
 
-class TutorialMySQLSaver(PyMySQLSaver):
-    # 仅用于全新的教学 checkpoint 库；不迁移已有 MD5 namespace 数据。
+class MySQLCheckpointSaver(PyMySQLSaver):
+    # 仅用于新建 SHA-256 namespace 表；不迁移旧 MD5 索引。
     # 社区库最终也使用普通列，但其旧建表步骤包含生成列。
     MIGRATIONS = [
         sql.replace("BINARY(16) AS (UNHEX(MD5(checkpoint_ns))) STORED", "BINARY(16)")

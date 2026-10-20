@@ -2,20 +2,22 @@ import logging
 import threading
 import time
 from contextlib import contextmanager
-from app.checkpoints import TutorialMySQLSaver
+from concurrent.futures import ThreadPoolExecutor
+from app.checkpoints import MySQLCheckpointSaver
 from langgraph.types import Command
 from app.config import settings
 from app.graph import build_graph
 from app.domain import Domain
 from app.knowledge import Knowledge
 from app.runs import Runs
+from app.activity import NODE_LABELS
 
 log = logging.getLogger("worker")
 
 
 @contextmanager
 def checkpoint():
-    with TutorialMySQLSaver.from_conn_string(settings().checkpoint_url) as saver:
+    with MySQLCheckpointSaver.from_conn_string(settings().checkpoint_url) as saver:
         saver.setup()
         yield saver
 
@@ -29,7 +31,6 @@ def process(r, graph, runs):
             if r.resume and snapshot.tasks and any(t.interrupts for t in snapshot.tasks)
             else None
         )
-        # fence 是运行上下文的最新事实，需要在恢复前覆盖旧值。
         graph.update_state(cfg, {"fence": r.fence})
     else:
         input_data = {
@@ -40,7 +41,22 @@ def process(r, graph, runs):
             "request": r.payload,
             "results": {},
         }
-    for event in graph.stream(input_data, cfg, stream_mode="updates"):
+    for part in graph.stream(
+        input_data, cfg, stream_mode="updates", subgraphs=True, version="v2"
+    ):
+        namespace, event = part["ns"], part["data"]
+        if namespace:
+            if len(namespace) != 1 or namespace[0].split(":")[0] not in (
+                "planning",
+                "policy",
+                "repair",
+            ):
+                continue
+            event = {
+                name: value for name, value in event.items() if name in NODE_LABELS
+            }
+            if not event:
+                continue
         runs.event(r.id, r.fence, "progress", event)
         if runs.get(r.owner, r.id).cancel_requested:
             result = {
@@ -87,8 +103,20 @@ def work_once():
     return True
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+def consume():
     while True:
-        if not work_once():
+        try:
+            if not work_once():
+                time.sleep(1)
+        except Exception:
+            log.exception("任务领取暂时失败，稍后重试")
             time.sleep(1)
+
+
+if __name__ == "__main__":
+    settings().dashscope_api_key
+    logging.basicConfig(level=logging.INFO)
+    with ThreadPoolExecutor(max_workers=settings().worker_concurrency) as pool:
+        consumers = [pool.submit(consume) for _ in range(settings().worker_concurrency)]
+        for consumer in consumers:
+            consumer.result()

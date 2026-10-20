@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.domain import Domain
 from app.contracts import Request
 from app.db import sessions
-from app.models import Inventory, Order, Quote, Resource
+from app.models import Inventory, Resource
 
 
 def req(intent="book", ids=None, order=None):
@@ -49,11 +49,11 @@ def test_partial_and_price_change(env):
     results = d.execute("alice", p["id"])
     assert [r["status"] for r in results] == ["SUCCESS", "FAILED"]
     assert len(d.orders("alice")) == 1
-    p2 = d.proposal("alice", req(ids=["flight-0"]))
-    d.decide("alice", p2["id"], 1, "approve")
+    p2 = d.proposal("bob", req(ids=["flight-0"]))
+    d.decide("bob", p2["id"], 1, "approve")
     with sessions().begin() as s:
         s.get(Resource, "flight-0").version += 1
-    assert d.execute("alice", p2["id"])[0]["status"] == "FAILED"
+    assert d.execute("bob", p2["id"])[0]["status"] == "FAILED"
 
 
 def test_change_same_kind_and_policy_revoke(env):

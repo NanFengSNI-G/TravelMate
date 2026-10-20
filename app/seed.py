@@ -61,8 +61,19 @@ def seed():
                 for n in range(16):
                     d = str(day + timedelta(days=n))
                     s.add(Inventory(id=f"{rid}-{d}", resource=rid, day=d, available=3))
-    print("演示用户 alice/bob/admin，密码 tutorial123；出行日期", day)
+    print("基础演示账号与资源已就绪")
 
 
 if __name__ == "__main__":
-    seed()
+    import argparse
+    from app.demo_data import append_demo, write_sql_seed
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--days", type=int, default=60)
+    parser.add_argument("--export-sql", action="store_true")
+    args = parser.parse_args()
+    if args.export_sql:
+        write_sql_seed()
+    else:
+        seed()
+        print("扩展示例目录：", append_demo(args.days))

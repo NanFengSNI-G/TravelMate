@@ -1,10 +1,19 @@
 import json
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from app.db import sessions
 from app.models import Run, Event, Conversation, Proposal, Operation, now
 
 
 class Runs:
+    @staticmethod
+    def touch_context(session, run):
+        # 与 Run 变更同一 MySQL 事务提交；旧缓存即使晚写，也不能覆盖新版本。
+        session.execute(
+            update(Conversation)
+            .where(Conversation.id == run.conversation, Conversation.owner == run.owner)
+            .values(context_version=Conversation.context_version + 1)
+        )
+
     def submit(self, owner, conversation, payload, text=""):
         with sessions().begin() as s:
             c = s.scalar(
@@ -12,23 +21,41 @@ class Runs:
                 .where(Conversation.id == conversation)
                 .with_for_update()
             )
-            if not c or c.owner != owner:
+            if not c or c.owner != owner or c.deleted:
                 raise ValueError("会话不存在")
-            active = s.scalar(
-                select(Run).where(
-                    Run.conversation == conversation,
-                    Run.status.in_(["QUEUED", "RUNNING", "WAITING"]),
+            active = list(
+                s.scalars(
+                    select(Run).where(
+                        Run.conversation == conversation,
+                        Run.status.in_(["QUEUED", "RUNNING", "WAITING"]),
+                    )
                 )
             )
-            if active:
-                raise ValueError("会话有进行中的任务；先处理审批")
-            c.history = [
-                *c.history,
-                {"text": text or payload.get("question", ""), "request": payload},
-            ]
+            if any(r.status in ("QUEUED", "RUNNING") for r in active):
+                raise ValueError("会话有正在处理的消息，请等待完成")
+            if active and payload.get("intent") not in (
+                "chat",
+                "orders",
+                "plans",
+                "policy",
+                "search",
+            ):
+                raise ValueError(
+                    "当前有待确认提案；可继续查询，修改需求请先拒绝或取消旧提案"
+                )
             run = Run(owner=owner, conversation=conversation, payload=payload)
             s.add(run)
             s.flush()
+            c.history = [
+                *c.history,
+                {
+                    "text": text or payload.get("question", ""),
+                    "request": payload,
+                    "run_id": run.id,
+                    "created_at": now(),
+                },
+            ]
+            c.context_version += 1
             return run.id
 
     def get(self, owner, rid):
@@ -36,6 +63,15 @@ class Runs:
             r = s.get(Run, rid)
             if not r or r.owner != owner:
                 raise ValueError("运行不存在")
+            conversation = s.scalar(
+                select(Conversation.id).where(
+                    Conversation.id == r.conversation,
+                    Conversation.owner == owner,
+                    Conversation.deleted == 0,
+                )
+            )
+            if not conversation:
+                raise ValueError("会话不存在")
             return r
 
     def claim(self):
@@ -55,6 +91,7 @@ class Runs:
             r.status = "RUNNING"
             r.lease_until = now() + 120
             r.fence += 1
+            self.touch_context(s, r)
             s.flush()
             return r
 
@@ -92,6 +129,7 @@ class Runs:
             r.result = result
             r.error = error
             r.lease_until = 0
+            self.touch_context(s, r)
 
     def resume(self, owner, rid, decision):
         if decision.get("decision") not in ("approve", "reject"):
@@ -109,6 +147,7 @@ class Runs:
                 raise ValueError("审批版本不匹配")
             r.resume = decision
             r.status = "QUEUED"
+            self.touch_context(s, r)
             return {"status": "QUEUED"}
 
     def events(self, owner, rid, after=0):
@@ -141,6 +180,7 @@ class Runs:
                 if p and p.status == "PENDING":
                     p.status = "REJECTED"
                 r.status = "CANCELLED"
+            self.touch_context(s, r)
             return {
                 "status": r.status,
                 "message": "停止尚未执行的操作；已完成订单不会自动取消",

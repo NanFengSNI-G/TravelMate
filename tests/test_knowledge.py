@@ -101,3 +101,29 @@ def test_historical_revision(env, tmp_path):
         )
     )
     assert restored.snapshot == [old_id]
+
+
+def test_reindex_preserves_published_revision_and_then_reuses_index(env):
+    meta = json.loads(Path("data/policies.json").read_text())[0]
+    path = Path("data") / meta.pop("file")
+    first = env.import_document(path, meta)
+    assert first["cached"] and first["status"] == "PUBLISHED"
+    (env.root / first["revision"] / "index.json").unlink()
+    rebuilt = env.import_document(path, meta)
+    assert rebuilt["revision"] == first["revision"]
+    assert rebuilt["status"] == "PUBLISHED" and not rebuilt["cached"]
+    env.publish(rebuilt["revision"])
+    assert env.import_document(path, meta)["cached"]
+
+
+def test_changed_policy_with_same_start_date_is_still_rejected(env, tmp_path):
+    import pytest
+
+    meta = json.loads(Path("data/policies.json").read_text())[0]
+    meta.pop("file")
+    path = tmp_path / "changed-airline.md"
+    path.write_text("# 航班条款\n取消费变为 200 元。")
+    meta["rules"]["cancel_fee_cents"] = 20000
+    changed = env.import_document(path, meta)
+    with pytest.raises(ValueError, match="只能向后发布"):
+        env.publish(changed["revision"])

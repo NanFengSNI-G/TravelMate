@@ -1,23 +1,76 @@
-name: travelmate-tutorial
+name: travelmate
+
+x-runtime: &runtime
+  DATABASE_URL: mysql+pymysql://travelmate:${MYSQL_PASSWORD:-travelmate_local}@mysql:3306/travelmate
+  CHECKPOINT_URL: mysql://travelmate:${MYSQL_PASSWORD:-travelmate_local}@mysql:3306/travelmate
+  QDRANT_URL: http://qdrant:6333
+  REDIS_URL: redis://:${REDIS_PASSWORD:?请设置 REDIS_PASSWORD}@redis:6379/0
+  AUTH_SECRET: ${AUTH_SECRET:?请设置 AUTH_SECRET}
+  TRAVELMATE_DASHSCOPE_API_KEY: ${TRAVELMATE_DASHSCOPE_API_KEY:?请导出主机模型密钥}
+  TRAVELMATE_DASHSCOPE_API_HOST: ${TRAVELMATE_DASHSCOPE_API_HOST:-https://dashscope.aliyuncs.com}
+  ARTIFACT_DIR: /workspace/artifacts
+  CONTEXT_MAX_TOKENS: ${CONTEXT_MAX_TOKENS:-6000}
+  CONVERSATION_CACHE_TTL_SECONDS: ${CONVERSATION_CACHE_TTL_SECONDS:-1800}
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+
+x-backend: &backend
+  build: .
+  environment: *runtime
+  volumes:
+    - ${TRAVELMATE_DATA_DIR:-./.docker-data}/artifacts:/workspace/artifacts
+  depends_on:
+    mysql: {condition: service_healthy}
+    qdrant: {condition: service_started}
+    redis: {condition: service_healthy}
+
 services:
   mysql:
-    image: mysql:8.4
+    image: mysql:9.6.0
     environment:
-      MYSQL_ROOT_PASSWORD: tutorial_root_local
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置 MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: travelmate
       MYSQL_USER: travelmate
-      MYSQL_PASSWORD: travelmate_local
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-travelmate_local}
     ports: ["127.0.0.1:13316:3306"]
-    volumes: ["mysql_data:/var/lib/mysql"]
+    volumes:
+      - ${TRAVELMATE_DATA_DIR:-./.docker-data}/mysql:/var/lib/mysql
+      - ./travelmate.sql:/docker-entrypoint-initdb.d/01-travelmate.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -utravelmate -e 'SELECT 1' travelmate"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -utravelmate -e 'SELECT 1 FROM users LIMIT 1' travelmate"]
       interval: 5s
       timeout: 3s
-      retries: 30
+      retries: 40
+      start_period: 30s
+
   qdrant:
     image: qdrant/qdrant:v1.17.0
     ports: ["127.0.0.1:16333:6333"]
-    volumes: ["qdrant_data:/qdrant/storage"]
-volumes:
-  mysql_data:
-  qdrant_data:
+    volumes:
+      - ${TRAVELMATE_DATA_DIR:-./.docker-data}/qdrant:/qdrant/storage
+
+  redis:
+    image: redis:7.4-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?请设置 REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes:
+      - ${TRAVELMATE_DATA_DIR:-./.docker-data}/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    <<: *backend
+    ports: ["127.0.0.1:18080:18080"]
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+
+  frontend:
+    build: ./frontend
+    ports: ["127.0.0.1:15173:80"]
+    depends_on: [api]

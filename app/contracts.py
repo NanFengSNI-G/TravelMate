@@ -26,14 +26,11 @@ class EvidenceBundle(BaseModel):
     evidence: list[Evidence]
 
 
-class Task(BaseModel):
-    id: str
-    role: Literal["flight", "hotel"]
-    depends_on: list[str] = Field(default_factory=list)
-
-
 class Request(BaseModel):
     intent: Literal[
+        "chat",
+        "orders",
+        "plans",
         "policy",
         "search",
         "plan",
@@ -44,9 +41,9 @@ class Request(BaseModel):
         "repair",
         "admin_write",
     ]
-    # 仅管理员专用 HTTP 入口可提交；普通消息入口禁止此意图。
     admin_action: dict | None = None
-    question: str = "取消政策是什么？"
+    question: str = ""
+    resolved_question: str | None = Field(default=None, max_length=2000)
     departure: str = "北京"
     destination: str = "上海"
     start: date | None = None
@@ -54,15 +51,66 @@ class Request(BaseModel):
     people: int = Field(default=1, ge=1, le=6)
     budget_cents: int = Field(default=600000, gt=0)
     resource_ids: list[str] = Field(default_factory=list, max_length=2)
+    resource_kinds: list[Literal["flight", "hotel"]] = Field(
+        default_factory=lambda: ["flight", "hotel"], min_length=1, max_length=2
+    )
+    option_id: str | None = None
     order_id: str | None = None
     plan_id: str | None = None
     proposal_id: str | None = None
+    case_id: str | None = None
 
     @model_validator(mode="after")
     def dates(self):
+        if len(self.resource_ids) != len(set(self.resource_ids)):
+            raise ValueError("同一请求不能重复选择同一资源")
         if self.start and self.end and not 0 < (self.end - self.start).days <= 14:
             raise ValueError("住宿需 1—14 晚，退房日期必须晚于入住")
         return self
+
+
+class TurnParameters(BaseModel):
+    """对话中的业务信息。没有业务默认值，不代表执行已经获准。"""
+
+    departure: str | None = None
+    destination: str | None = None
+    start: date | None = None
+    end: date | None = None
+    people: int | None = Field(default=None, ge=1, le=6)
+    budget_cents: int | None = Field(default=None, gt=0)
+    resource_ids: list[str] | None = Field(default=None, max_length=2)
+    resource_kinds: list[Literal["flight", "hotel"]] | None = None
+    order_id: str | None = None
+    plan_id: str | None = None
+    option_id: str | None = None
+
+
+class TurnUnderstanding(BaseModel):
+    """本轮对话理解结果；进入业务层时再构造 Request。"""
+
+    intent: Literal[
+        "chat",
+        "orders",
+        "plans",
+        "policy",
+        "search",
+        "plan",
+        "repair",
+        "book",
+        "change",
+        "cancel",
+        "support",
+    ]
+    resolved_question: str = Field(
+        min_length=1, max_length=2000, description="结合对话展开后的本轮需求"
+    )
+    parameters: TurnParameters = Field(
+        default_factory=TurnParameters,
+        description="当前目标相关的已知业务信息；只填写有依据的值",
+    )
+    selected_option_index: int | None = Field(
+        default=None, ge=1, description="仅表示已生成旅行方案中的选择序号；其他选择不填"
+    )
 
 
 class Message(BaseModel):
@@ -82,21 +130,6 @@ class RepairOption(BaseModel):
 class RepairReport(BaseModel):
     options: list[RepairOption] = Field(min_length=2, max_length=2)
     unresolved: list[str] = Field(default_factory=list)
-
-
-def validate_tasks(tasks: list[Task]):
-    if len(tasks) > 6 or len({t.id for t in tasks}) != len(tasks):
-        raise ValueError("任务数量或 ID 非法")
-    waiting = {t.id: set(t.depends_on) for t in tasks}
-    done = set()
-    while waiting:
-        ready = [k for k, v in waiting.items() if v <= done]
-        if not ready:
-            raise ValueError("任务有环或依赖不存在")
-        for k in ready:
-            done.add(k)
-            del waiting[k]
-    return tasks
 
 
 def merge_results(left: dict, right: dict):
@@ -125,3 +158,26 @@ class PolicyMetadata(BaseModel):
         if self.valid_to < self.valid_from:
             raise ValueError("政策有效期非法")
         return self
+
+
+class CandidateReview(BaseModel):
+    ranked_ids: list[str] = Field(min_length=1, max_length=3)
+    reasoning: str = Field(min_length=1)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DayActivity(BaseModel):
+    date: date
+    activity: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
+class PlannedOption(BaseModel):
+    resource_ids: list[str] = Field(min_length=2, max_length=2)
+    label: str
+    explanation: str
+    days: list[DayActivity] = Field(default_factory=list)
+
+
+class PlanDesign(BaseModel):
+    options: list[PlannedOption] = Field(min_length=1, max_length=2)

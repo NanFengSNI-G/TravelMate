@@ -1,5 +1,3 @@
-"""框架计算检索指标；业务标签仍由人按原文维护。"""
-
 import json
 import statistics
 import time
@@ -94,7 +92,7 @@ def evaluate(k=None, output=Path("artifacts/retrieval-results.json")):
     result = {
         "summary": summary,
         "rows": rows,
-        "scope": "60条合成查询；原生指标；相关section映射到其父/叶节点集合；MockEmbedding不代表语义模型质量；未评价回答忠实度",
+        "scope": "60条合成查询；原生指标；相关section映射到其父/叶节点集合；使用真实 qwen3.7-text-embedding；本评测未评价回答忠实度",
     }
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2))
     print(json.dumps(summary, ensure_ascii=False, indent=2))

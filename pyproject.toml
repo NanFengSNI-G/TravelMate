@@ -1,13 +1,13 @@
 [project]
-name = "travelmate-tutorial"
+name = "travelmate"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = ["fastapi", "uvicorn", "sqlalchemy", "pymysql", "cryptography",
- "pydantic-settings", "httpx", "PyJWT==2.10.1", "langchain", "langchain-openai", "langgraph",
+ "pydantic-settings", "httpx", "redis==8.1.0", "PyJWT==2.10.1", "langchain", "langchain-openai", "langgraph",
  "langgraph-checkpoint-mysql", "qdrant-client==1.18.0", "llama-index-core",
  "llama-index-vector-stores-qdrant",
  "deepagents", "llama-index-readers-file==0.7.0", "llama-index-embeddings-dashscope==0.6.0",
- "llama-index-llms-dashscope==0.7.0", "llama-index-postprocessor-dashscope-rerank==0.6.0",
+ "llama-index-llms-openai-like==0.8.1", "llama-index-postprocessor-dashscope-rerank==0.6.0",
  "llama-index-retrievers-bm25==0.8.0"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]

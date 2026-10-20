@@ -1,6 +1,255 @@
 [
- {"document":"airline","supplier":"演示航空","product":"economy","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":10000},"file":"airline.md"},
- {"document":"hotel-standard","supplier":"演示酒店","product":"standard","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":5000},"file":"hotel-standard.md"},
- {"document":"hotel-flexible","supplier":"演示酒店","product":"flexible","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":0},"file":"hotel-flexible.md"},
- {"document":"destination","supplier":"目的地指南","product":"上海","valid_from":"2020-01-01","valid_to":"2099-12-31","rules":{"cancel_fee_cents":0},"file":"destination.md"}
+  {
+    "document": "airline",
+    "supplier": "演示航空",
+    "product": "economy",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 10000
+    },
+    "file": "airline.md"
+  },
+  {
+    "document": "hotel-standard",
+    "supplier": "演示酒店",
+    "product": "standard",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 5000
+    },
+    "file": "hotel-standard.md"
+  },
+  {
+    "document": "hotel-flexible",
+    "supplier": "演示酒店",
+    "product": "flexible",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "hotel-flexible.md"
+  },
+  {
+    "document": "destination",
+    "supplier": "目的地指南",
+    "product": "上海",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destination.md"
+  },
+  {
+    "document": "destination-bj",
+    "supplier": "目的地指南",
+    "product": "北京",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/bj.md"
+  },
+  {
+    "document": "destination-gz",
+    "supplier": "目的地指南",
+    "product": "广州",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/gz.md"
+  },
+  {
+    "document": "destination-sz",
+    "supplier": "目的地指南",
+    "product": "深圳",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/sz.md"
+  },
+  {
+    "document": "destination-hz",
+    "supplier": "目的地指南",
+    "product": "杭州",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/hz.md"
+  },
+  {
+    "document": "destination-cd",
+    "supplier": "目的地指南",
+    "product": "成都",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/cd.md"
+  },
+  {
+    "document": "destination-cq",
+    "supplier": "目的地指南",
+    "product": "重庆",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/cq.md"
+  },
+  {
+    "document": "destination-xa",
+    "supplier": "目的地指南",
+    "product": "西安",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/xa.md"
+  },
+  {
+    "document": "destination-nj",
+    "supplier": "目的地指南",
+    "product": "南京",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/nj.md"
+  },
+  {
+    "document": "destination-wh",
+    "supplier": "目的地指南",
+    "product": "武汉",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/wh.md"
+  },
+  {
+    "document": "destination-cs",
+    "supplier": "目的地指南",
+    "product": "长沙",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/cs.md"
+  },
+  {
+    "document": "destination-xm",
+    "supplier": "目的地指南",
+    "product": "厦门",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/xm.md"
+  },
+  {
+    "document": "destination-qd",
+    "supplier": "目的地指南",
+    "product": "青岛",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/qd.md"
+  },
+  {
+    "document": "destination-dl",
+    "supplier": "目的地指南",
+    "product": "大连",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/dl.md"
+  },
+  {
+    "document": "destination-km",
+    "supplier": "目的地指南",
+    "product": "昆明",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/km.md"
+  },
+  {
+    "document": "destination-lj",
+    "supplier": "目的地指南",
+    "product": "丽江",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/lj.md"
+  },
+  {
+    "document": "destination-sy",
+    "supplier": "目的地指南",
+    "product": "三亚",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/sy.md"
+  },
+  {
+    "document": "destination-gl",
+    "supplier": "目的地指南",
+    "product": "桂林",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/gl.md"
+  },
+  {
+    "document": "destination-hrb",
+    "supplier": "目的地指南",
+    "product": "哈尔滨",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/hrb.md"
+  },
+  {
+    "document": "destination-hk",
+    "supplier": "目的地指南",
+    "product": "海口",
+    "valid_from": "2020-01-01",
+    "valid_to": "2099-12-31",
+    "rules": {
+      "cancel_fee_cents": 0
+    },
+    "file": "destinations/hk.md"
+  }
 ]

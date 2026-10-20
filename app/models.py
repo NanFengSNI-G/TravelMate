@@ -31,6 +31,10 @@ class Conversation(Row, Base):
     __tablename__ = "conversations"
     owner: Mapped[str] = mapped_column(String(64), index=True)
     history: Mapped[list] = mapped_column(JSON, default=list)
+    context_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    title: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    deleted: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[int] = mapped_column(Integer, default=now, server_default="0")
 
 
 class Resource(Row, Base):

@@ -1,10 +1,7 @@
-"""确认前没有用户业务写入；草稿及运行状态不是业务提交。"""
-
 from datetime import timedelta
 import pytest
 from sqlalchemy import select
 from fastapi.testclient import TestClient
-from langgraph.checkpoint.memory import InMemorySaver
 from app.api import app
 from app.auth import token
 from app.domain import Domain
@@ -26,7 +23,7 @@ def count(model):
 
 @pytest.mark.parametrize("intent", ["plan", "support", "repair"])
 @pytest.mark.parametrize("decision", ["approve", "reject"])
-def test_content_waits_for_owner_confirmation(env, intent, decision):
+def test_content_waits_for_owner_confirmation(env, intent, decision, saver):
     domain, runs = Domain(env), Runs()
     request = req(intent)
     if intent == "repair":
@@ -35,7 +32,7 @@ def test_content_waits_for_owner_confirmation(env, intent, decision):
         request.end += timedelta(days=1)
     before = (count(Plan), count(Case))
     rid = runs.submit("alice", conversation(), request.model_dump(mode="json"))
-    graph = build_graph(domain, InMemorySaver())
+    graph = build_graph(domain, saver)
     process(runs.claim(), graph, runs)
     assert runs.get("alice", rid).status == "WAITING"
     assert (count(Plan), count(Case)) == before
@@ -62,7 +59,7 @@ def test_content_waits_for_owner_confirmation(env, intent, decision):
         assert count(Case) == before[1] + (intent == "support")
 
 
-def test_admin_knowledge_waits_and_cannot_be_forged(env):
+def test_admin_knowledge_waits_and_cannot_be_forged(env, saver):
     client, runs = TestClient(app), Runs()
     headers = {"Authorization": "Bearer " + token("admin")}
     alice = {"Authorization": "Bearer " + token("alice")}
@@ -73,7 +70,7 @@ def test_admin_knowledge_waits_and_cannot_be_forged(env):
     assert queued.status_code == 200
     with sessions()() as s:
         assert s.get(Revision, rid).status == before
-    graph = build_graph(Domain(env), InMemorySaver())
+    graph = build_graph(Domain(env), saver)
     process(runs.claim(), graph, runs)
     run_id = queued.json()["run_id"]
     assert runs.get("admin", run_id).status == "WAITING"
@@ -108,9 +105,9 @@ def test_admin_knowledge_waits_and_cannot_be_forged(env):
     )
 
 
-def test_queries_do_not_interrupt(env):
+def test_queries_do_not_interrupt(env, saver):
     runs, domain = Runs(), Domain(env)
-    graph = build_graph(domain, InMemorySaver())
+    graph = build_graph(domain, saver)
     for intent in ("policy", "search"):
         rid = runs.submit("alice", conversation(), req(intent).model_dump(mode="json"))
         process(runs.claim(), graph, runs)
@@ -120,18 +117,17 @@ def test_queries_do_not_interrupt(env):
 
 @pytest.mark.parametrize("action", ["import", "publish", "rollback", "claim", "reply"])
 @pytest.mark.parametrize("decision", ["approve", "reject"])
-def test_each_admin_write_endpoint_is_gated(env, monkeypatch, action, decision):
+def test_each_admin_write_endpoint_is_gated(env, monkeypatch, action, decision, saver):
     import base64
 
     client, runs = TestClient(app), Runs()
     headers = {"Authorization": "Bearer " + token("admin")}
     calls = []
     if action in ("claim", "reply"):
-        # 测试准备已有工单；被测 HTTP 接口不能直接改它。
         with sessions().begin() as s:
             case = Case(
                 owner="alice",
-                request_id="fixture-case",
+                request_id="existing-case",
                 context={},
                 assigned="admin" if action == "reply" else None,
             )
@@ -172,7 +168,7 @@ def test_each_admin_write_endpoint_is_gated(env, monkeypatch, action, decision):
     queued = client.post(path, headers=headers, json=body)
     assert queued.status_code == 200
     run_id = queued.json()["run_id"]
-    graph = build_graph(Domain(env), InMemorySaver())
+    graph = build_graph(Domain(env), saver)
     process(runs.claim(), graph, runs)
     assert runs.get("admin", run_id).status == "WAITING" and calls == []
     if action in ("claim", "reply"):

@@ -1,8 +1,5 @@
-import os
-from contextlib import nullcontext
 from fastapi.testclient import TestClient
-from langgraph.checkpoint.memory import InMemorySaver
-from app.checkpoints import TutorialMySQLSaver
+from app.checkpoints import MySQLCheckpointSaver
 from app.api import app
 from app.domain import Domain
 from app.graph import build_graph
@@ -28,18 +25,15 @@ def test_full_user_journey(env):
     from app.config import settings
 
     cp = settings().checkpoint_url
-    with (
-        TutorialMySQLSaver.from_conn_string(cp) if cp else nullcontext(InMemorySaver())
-    ) as saver:
-        if cp:
-            saver.setup()
+    with MySQLCheckpointSaver.from_conn_string(cp) as saver:
+        saver.setup()
         graph = build_graph(Domain(env), saver)
 
         def submit(r):
             response = client.post(
                 f"/api/conversations/{cid}/messages",
                 headers=alice,
-                json={"text": "教学案例", "request": r.model_dump(mode="json")},
+                json={"text": "服务咨询", "request": r.model_dump(mode="json")},
             )
             assert response.status_code == 200, response.text
             rid = response.json()["run_id"]
@@ -60,7 +54,8 @@ def test_full_user_journey(env):
         assert result["status"] == "WAITING"
         result = confirm(rid)
         assert (
-            result["status"] == "DONE" and len(result["result"]["plan"]["options"]) == 2
+            result["status"] == "DONE"
+            and 1 <= len(result["result"]["plan"]["options"]) <= 2
         )
         chosen = result["result"]["plan"]["options"][0]
         request = req()

@@ -1,130 +1,117 @@
-from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send, interrupt
-from app.contracts import Request, Task, validate_tasks, merge_results
+from langgraph.types import interrupt
+from langchain_core.messages import AIMessage
+from app.contracts import Request
 from app.agents import Agents
-from app.recovery import Recovery
+from app.conversations import (
+    history,
+    messages as conversation_messages,
+    assistant_content,
+)
+from app.workflows import State, READ_RETRY, policy_graph, planning_graph, repair_graph
 
 
-class State(TypedDict, total=False):
-    owner: str
-    run_id: str
-    conversation_id: str
-    fence: int
-    request: dict
-    tasks: list[dict]
-    task: dict
-    results: Annotated[dict, merge_results]
-    customer: dict
-    outcome: dict
-    proposal: dict
-    stopped: bool
+def business_route(state):
+    if state.get("stopped"):
+        return "finish"
+    return {
+        "chat": "customer",
+        "orders": "customer",
+        "plans": "customer",
+        "policy": "policy",
+        "search": "search",
+        "plan": "planning",
+        "repair": "repair",
+        "book": "prepare",
+        "change": "prepare",
+        "cancel": "prepare",
+        "support": "prepare",
+        "admin_write": "prepare",
+    }[state["request"]["intent"]]
 
 
 def build_graph(domain, saver):
-    agents = Agents(domain, saver)
+    agents = Agents(domain)
 
-    def customer(state):
+    def context(state):
         req = Request.model_validate(state["request"])
+        entries = history(state["owner"], state["conversation_id"], state["run_id"])
+        base = {
+            "context": entries,
+            "messages": conversation_messages(entries, req.question, state["run_id"]),
+        }
+        missing = None
         if req.intent in ("search", "plan", "book", "change", "repair") and (
             not req.start or not req.end
         ):
+            missing = "请补充起止日期，住宿需 1—14 晚。"
+        elif req.intent in ("book", "change") and not req.resource_ids:
+            missing = "请先选择要预订或更换的资源。"
+        elif req.intent in ("change", "cancel") and not req.order_id:
+            missing = "请先选择需要处理的本人订单。"
+        elif req.intent == "repair" and not req.plan_id:
+            missing = "请先选择需要调整的已保存行程。"
+        elif req.intent == "policy" and not req.order_id and len(req.resource_ids) != 1:
             return {
+                **base,
                 "stopped": True,
-                "outcome": {"message": "请补充起止日期，住宿需 1—14 晚。"},
+                "outcome": {
+                    "message": "不同航班和房型的政策可能不同。请选择本次要咨询的资源；已有订单请从订单详情查询，以保留原政策版本。",
+                    "policy_choices": domain.policy_choices(),
+                },
             }
-        if req.intent == "admin_write":
-            return {"customer": {}, "tasks": [], "stopped": False}
+        if missing:
+            return {**base, "stopped": True, "outcome": {"message": missing}}
+        return {**base, "stopped": False}
+
+    def customer(state):
         result = agents.customer(
-            state["owner"], req, state.get("conversation_id", state["run_id"])
+            state["owner"],
+            Request.model_validate(state["request"]),
+            dialogue=state["messages"],
+            pending=any(entry.get("status") == "WAITING" for entry in state["context"]),
         )
-        tasks = []
-        if req.intent in ("search", "plan", "book", "change"):
-            tasks = [
-                Task(id="flight", role="flight"),
-                Task(
-                    id="hotel",
-                    role="hotel",
-                    depends_on=["flight"] if req.intent == "change" else [],
-                ),
-            ]
-        validate_tasks(tasks)
+        return {"customer": result, "outcome": {"customer": result}}
+
+    def search(state):
+        req = Request.model_validate(state["request"])
         return {
-            "customer": result,
-            "tasks": [t.model_dump() for t in tasks],
-            "stopped": False,
+            "outcome": {
+                "results": {
+                    kind: {"candidates": domain.search(kind, req)}
+                    for kind in set(req.resource_kinds)
+                }
+            }
         }
 
-    def dispatch(state):
-        return {}
-
-    def route(state):
-        if state.get("stopped"):
-            return "finish"
-        completed = set(state.get("results", {}))
-        ready = [
-            t
-            for t in state.get("tasks", [])
-            if t["id"] not in completed and set(t["depends_on"]) <= completed
-        ]
-        if ready:
-            return [Send(t["role"], {**state, "task": t}) for t in ready]
-        return "join"
-
-    def specialist(role):
-        def run(state):
-            result = agents.specialist(role, Request.model_validate(state["request"]))
-            return {"results": {state["task"]["id"]: result}}
-
-        return run
-
-    def join(state):
-        req = Request.model_validate(state["request"])
-        owner = state["owner"]
-        if req.intent == "policy":
-            ev = domain.evidence(owner, req)
-            return {
-                "outcome": {"evidence": ev.model_dump(), "customer": state["customer"]}
-            }
-        if req.intent == "search":
-            return {"outcome": {"results": state.get("results", {})}}
-        if req.intent == "plan":
-            draft = domain.plan_draft(owner, req, state["results"])
-            return {
-                "proposal": domain.pending(owner, "plan_create", draft, state["run_id"])
-            }
-        if req.intent == "support":
-            context = {
-                "request": req.model_dump(mode="json"),
-                "customer": state["customer"],
-            }
-            return {
-                "proposal": domain.pending(
-                    owner, "case_create", context, state["run_id"]
-                )
-            }
-        if req.intent == "repair":
-            report = Recovery(domain, saver).run(owner, state["run_id"], req)
-            return {
-                "proposal": domain.pending(
+    def prepare(state):
+        req, owner = Request.model_validate(state["request"]), state["owner"]
+        try:
+            if req.intent == "support":
+                if req.case_id:
+                    case = domain.support_case(owner, req.case_id)
+                    if case.status == "CLOSED":
+                        raise ValueError("该申请已结束，请重新发起服务申请")
+                proposal = domain.pending(
                     owner,
-                    "repair_save",
-                    {"plan_id": req.plan_id, "report": report},
+                    "case_message" if req.case_id else "case_create",
+                    {
+                        "request": req.model_dump(mode="json"),
+                        "conversation": state.get("context", []),
+                    },
                     state["run_id"],
                 )
-            }
-        if req.intent == "admin_write":
-            return {
-                "proposal": domain.prepare_admin(
+            elif req.intent == "admin_write":
+                proposal = domain.prepare_admin(
                     owner, req.admin_action, state["run_id"]
                 )
-            }
-        if req.intent in ("book", "change", "cancel"):
-            # run ID 作为稳定提案 ID，节点重跑不会创建第二个待批准提案。
-            return {"proposal": domain.proposal(owner, req, request_id=state["run_id"])}
-        return {"outcome": {"message": "请选择业务类型"}}
+            else:
+                proposal = domain.proposal(owner, req, request_id=state["run_id"])
+            return {"proposal": proposal}
+        except ValueError as exc:
+            return {"outcome": {"message": str(exc)}}
 
-    def after_join(state):
+    def after_prepare(state):
         return "approval" if state.get("proposal") else "finish"
 
     def approval(state):
@@ -138,9 +125,6 @@ def build_graph(domain, saver):
             state["owner"], proposal["id"], proposal["version"], decision["decision"]
         )
         return {"outcome": {"decision": decision["decision"]}}
-
-    def after_approval(state):
-        return "execute" if state["outcome"]["decision"] == "approve" else "finish"
 
     def execute(state):
         result = domain.execute(
@@ -159,27 +143,41 @@ def build_graph(domain, saver):
         return {"outcome": outcome}
 
     def finish(state):
-        return {}
+        return {
+            "messages": [
+                AIMessage(
+                    content=assistant_content(state.get("outcome", {})),
+                    id=state["run_id"] + ":assistant",
+                )
+            ]
+        }
 
     g = StateGraph(State)
-    for name, fn in [
-        ("customer", customer),
-        ("dispatch", dispatch),
-        ("flight", specialist("flight")),
-        ("hotel", specialist("hotel")),
-        ("join", join),
-        ("approval", approval),
-        ("execute", execute),
-        ("finish", finish),
-    ]:
-        g.add_node(name, fn)
-    g.add_edge(START, "customer")
-    g.add_edge("customer", "dispatch")
-    g.add_conditional_edges("dispatch", route)
-    g.add_edge("flight", "dispatch")
-    g.add_edge("hotel", "dispatch")
-    g.add_conditional_edges("join", after_join)
-    g.add_conditional_edges("approval", after_approval)
+    g.add_node("context", context)
+    g.add_node("customer", customer, retry_policy=READ_RETRY)
+    g.add_node("search", search, retry_policy=READ_RETRY)
+    g.add_node("policy", policy_graph(domain))
+    g.add_node("planning", planning_graph(domain, agents))
+    g.add_node("repair", repair_graph(domain, saver))
+    g.add_node("prepare", prepare)
+    g.add_node("approval", approval)
+    g.add_node("execute", execute)
+    g.add_node("finish", finish)
+    g.add_edge(START, "context")
+    g.add_conditional_edges(
+        "context",
+        business_route,
+        ["customer", "search", "policy", "planning", "repair", "prepare", "finish"],
+    )
+    for node in ("customer", "search", "policy"):
+        g.add_edge(node, "finish")
+    for node in ("planning", "repair", "prepare"):
+        g.add_conditional_edges(node, after_prepare, ["approval", "finish"])
+    g.add_conditional_edges(
+        "approval",
+        lambda s: "execute" if s["outcome"]["decision"] == "approve" else "finish",
+        ["execute", "finish"],
+    )
     g.add_edge("execute", "finish")
     g.add_edge("finish", END)
     return g.compile(checkpointer=saver)

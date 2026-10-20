@@ -2,10 +2,9 @@ import math
 import json
 import base64
 import hashlib
-from pathlib import Path
 from app.config import settings
 from datetime import date, timedelta
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.db import sessions
 from app.models import (
     User,
@@ -36,6 +35,7 @@ class Domain:
                     "resource": o.resource,
                     "status": o.status,
                     "amount": o.amount,
+                    "quantity": o.quantity,
                     "version": o.version,
                     "slots": o.slots,
                 }
@@ -49,26 +49,141 @@ class Domain:
                 raise ValueError("订单不存在")
             return row
 
+    def pending_quotes(self, owner):
+        result = []
+        with sessions()() as s:
+            for proposal in s.scalars(
+                select(Proposal).where(
+                    Proposal.owner == owner, Proposal.status == "PENDING"
+                )
+            ):
+                actions = []
+                for action in proposal.actions:
+                    quote = (
+                        s.get(Quote, action["quote"]) if action.get("quote") else None
+                    )
+                    order = (
+                        s.get(Order, action["order"]) if action.get("order") else None
+                    )
+                    if (quote and quote.owner != owner) or (
+                        order and order.owner != owner
+                    ):
+                        raise ValueError("报价不属于当前用户")
+                    rid = quote.resource if quote else order.resource if order else None
+                    resource = s.get(Resource, rid) if rid else None
+                    if resource:
+                        actions.append(
+                            {
+                                "kind": action["kind"],
+                                "name": resource.name,
+                                "amount_cents": quote.amount if quote else order.amount,
+                                "difference_cents": (
+                                    quote.amount - order.amount
+                                    if quote and order
+                                    else None
+                                ),
+                                "cancel_fee_cents": action.get("fee"),
+                                "quantity": quote.quantity if quote else order.quantity,
+                            }
+                        )
+                if actions:
+                    result.append(
+                        {
+                            "proposal_id": proposal.id,
+                            "expires": proposal.expires,
+                            "expired": proposal.expires < now(),
+                            "actions": actions,
+                        }
+                    )
+        return result
+
+    def policy_choices(self):
+        with sessions()() as s:
+            representatives = select(func.min(Resource.id)).group_by(
+                Resource.kind, Resource.supplier, Resource.product
+            )
+            return [
+                {"id": r.id, "name": f"{r.supplier} · {r.product}", "kind": r.kind}
+                for r in s.scalars(
+                    select(Resource).where(Resource.id.in_(representatives))
+                )
+            ]
+
+    def catalog_summary(self):
+        from app.demo_data import business_today
+
+        with sessions()() as s:
+            cities = sorted(
+                set(
+                    s.scalars(
+                        select(Resource.details["destination"].as_string()).distinct()
+                    )
+                )
+            )
+            dates = s.execute(
+                select(
+                    func.min(Resource.details["date"].as_string()),
+                    func.max(Resource.details["date"].as_string()),
+                ).where(
+                    Resource.kind == "flight",
+                    Resource.details["date"].as_string() >= str(business_today()),
+                )
+            ).one()
+            counts = dict(
+                s.execute(
+                    select(Resource.kind, func.count()).group_by(Resource.kind)
+                ).all()
+            )
+            return {
+                "cities": cities,
+                "flight_dates": {"start": dates[0], "end": dates[1]},
+                "resource_counts": {
+                    "dated_flights": counts.get("flight", 0),
+                    "hotel_room_types": counts.get("hotel", 0),
+                },
+                "scope": "本地合成演示目录，支持单程航班和酒店，不是真实供应商的实时库存",
+            }
+
+    def support_case(self, owner, case_id):
+        with sessions()() as s:
+            case = s.get(Case, case_id)
+            if not case or case.owner != owner:
+                raise ValueError("服务申请不存在")
+            return case
+
     def search(self, kind, req):
         with sessions()() as s:
-            rows = s.scalars(select(Resource).where(Resource.kind == kind)).all()
+            query = select(Resource).where(
+                Resource.kind == kind,
+                Resource.details["destination"].as_string() == req.destination,
+            )
+            if kind == "flight":
+                query = query.where(
+                    Resource.details["departure"].as_string() == req.departure,
+                    Resource.details["date"].as_string() == str(req.start),
+                )
+            rows = list(s.scalars(query.order_by(Resource.price, Resource.id)))
+            slots_by_id = {r.id: self.slots(r, req) for r in rows}
+            all_slots = [slot for slots in slots_by_id.values() for slot in slots]
+            stock = (
+                {
+                    v.id: v.available
+                    for v in s.scalars(
+                        select(Inventory).where(Inventory.id.in_(all_slots))
+                    )
+                }
+                if all_slots
+                else {}
+            )
             result = []
             for r in rows:
-                if r.details.get("destination") != req.destination:
-                    continue
-                if kind == "flight" and (
-                    r.details.get("departure") != req.departure
-                    or r.details.get("date") != str(req.start)
-                ):
-                    continue
-                slots = self.slots(r, req)
+                slots = slots_by_id[r.id]
                 quantity = (
                     req.people
                     if kind == "flight"
                     else math.ceil(req.people / r.details["max_people"])
                 )
-                inv = list(s.scalars(select(Inventory).where(Inventory.id.in_(slots))))
-                if len(inv) != len(slots) or any(v.available < quantity for v in inv):
+                if any(stock.get(slot, 0) < quantity for slot in slots):
                     continue
                 result.append(
                     {
@@ -98,36 +213,71 @@ class Domain:
             for i in range((req.end - req.start).days)
         ]
 
+    def plans(self, owner):
+        with sessions()() as s:
+            return [
+                {"id": p.id, "options": p.options, "created": p.created}
+                for p in s.scalars(select(Plan).where(Plan.owner == owner))
+            ]
+
     def evidence(self, owner, req):
         if req.order_id:
             order = self.order(owner, req.order_id)
             with sessions()() as s:
                 r = s.get(Resource, order.resource)
             query = Query(
-                question=req.question,
+                question=req.resolved_question or req.question,
                 supplier=r.supplier,
                 product=r.product,
                 applicable_date=date.today(),
                 revision_id=order.revision,
             )
         else:
+            if len(req.resource_ids) != 1:
+                raise ValueError("请指定一个资源或本人订单后查询适用政策")
             with sessions()() as s:
-                r = s.get(
-                    Resource, req.resource_ids[0] if req.resource_ids else "hotel-0"
-                )
+                r = s.get(Resource, req.resource_ids[0])
+                if not r:
+                    raise ValueError("资源不存在")
             query = Query(
-                question=req.question,
+                question=req.resolved_question or req.question,
                 supplier=r.supplier,
                 product=r.product,
                 applicable_date=date.today(),
             )
         return self.knowledge.retrieve(query)
 
+    @staticmethod
+    def ensure_not_booked(s, owner, resource, slots, exclude_order=None):
+        rows = s.scalars(
+            select(Order).where(
+                Order.owner == owner,
+                Order.resource == resource.id,
+                Order.status == "CONFIRMED",
+            )
+        )
+        requested = set(slots)
+        if any(
+            row.id != exclude_order and requested.intersection(row.slots)
+            for row in rows
+        ):
+            raise ValueError(
+                f"您在这些日期已预订「{resource.name}」，不能重复预订，请前往预订订单查看或变更。"
+            )
+
     def make_quote(self, owner, rid, req):
         with sessions()() as s:
             r = s.get(Resource, rid)
         if not r:
             raise ValueError("资源不存在")
+        with sessions()() as s:
+            self.ensure_not_booked(
+                s,
+                owner,
+                r,
+                self.slots(r, req),
+                req.order_id if req.intent == "change" else None,
+            )
         candidates = self.search(r.kind, req)
         match = next((x for x in candidates if x["id"] == rid), None)
         if not match:
@@ -250,7 +400,6 @@ class Domain:
             }
 
     def pending(self, owner, kind, data, request_id):
-        """冻结将要执行的内容；Proposal 本身只是审批状态，不是已生效业务。"""
         with sessions().begin() as s:
             p = s.get(Proposal, request_id)
             if p and p.owner != owner:
@@ -297,7 +446,6 @@ class Domain:
                 revision = s.get(Revision, action.get("revision"))
                 if not revision:
                     raise ValueError("版本不存在")
-                # 确认后若版本集已变化，要求重新生成提案，避免执行旧快照。
                 action["before"] = self.revision_snapshot(s, revision.document)
             elif kind != "knowledge_import":
                 raise ValueError("不支持的后台变更")
@@ -331,7 +479,6 @@ class Domain:
 
     def execute(self, owner, pid, run_id=None, fence=None):
         results = []
-        # 每个 action 独立事务；已成功项由稳定 operation ID 去重。
         with sessions()() as s:
             p = s.get(Proposal, pid)
             if (
@@ -345,7 +492,6 @@ class Domain:
             op_id = f"{pid}:{i}"
             try:
                 with sessions().begin() as s:
-                    # 先锁父提案，防止并发批准重复事务。
                     p = s.scalar(
                         select(Proposal).where(Proposal.id == pid).with_for_update()
                     )
@@ -365,6 +511,10 @@ class Domain:
                         "PARTIAL",
                     ):
                         raise ValueError("未批准的提案不能执行")
+                    # 同一用户的交易串行化；先锁用户再普通读取，避免旧快照漏查订单。
+                    if action["kind"] in ("book", "change", "cancel"):
+                        if not s.get(User, owner, with_for_update=True):
+                            raise ValueError("用户不存在")
                     previous = s.get(Operation, op_id)
                     if previous:
                         results.append(previous.result)
@@ -390,6 +540,7 @@ class Domain:
         if action["kind"] in (
             "plan_create",
             "case_create",
+            "case_message",
             "repair_save",
             "admin_write",
         ):
@@ -419,8 +570,10 @@ class Domain:
             )
             if resource.version != quote.resource_version:
                 raise ValueError("价格已变化")
+            self.ensure_not_booked(
+                s, owner, resource, quote.slots, old.id if old else None
+            )
             rev = s.get(Revision, quote.revision)
-            # 预订报价固定在报价时适用版本；撤回才失效，普通新版本不篡改报价。
             if rev.status != "PUBLISHED":
                 raise ValueError("报价政策已撤回")
         slot_ids = sorted(
@@ -477,46 +630,62 @@ class Domain:
             raise ValueError("无法组成行程：请调整日期或目的地")
         evidence = self.knowledge.retrieve(
             Query(
-                question="上海三天行程与延期",
+                question=f"{req.destination}行程活动与延期注意事项",
                 supplier="目的地指南",
-                product="上海",
-                applicable_date=date.today(),
+                product=req.destination,
+                applicable_date=req.start,
             )
         )
         options = []
-        for hotel in hotels[:2]:
-            total = flights[0]["amount"] + hotel["amount"]
-            if total <= req.budget_cents:
-                options.append(
-                    {
-                        "label": hotel["name"],
-                        "resource_ids": [flights[0]["id"], hotel["id"]],
-                        "amount": total,
-                        "start": str(req.start),
-                        "end": str(req.end),
-                        "people": req.people,
-                        "budget_cents": req.budget_cents,
-                        "scope": "仅机票与酒店；餐饮、当地交通和景点费用未计入",
-                        "evidence": evidence.model_dump(),
-                        "days": [
-                            {
-                                "date": str(req.start + timedelta(days=i)),
-                                "activity": (
-                                    "外滩散步"
-                                    if i == 0
-                                    else "博物馆与餐饮（需核实预约）"
-                                ),
-                            }
-                            for i in range((req.end - req.start).days)
-                        ],
-                    }
-                )
+        for flight in flights:
+            for hotel in hotels:
+                total = flight["amount"] + hotel["amount"]
+                if total <= req.budget_cents:
+                    options.append(
+                        {
+                            "label": f'{flight["name"]} + {hotel["name"]}',
+                            "resource_ids": [flight["id"], hotel["id"]],
+                            "amount": total,
+                            "start": str(req.start),
+                            "end": str(req.end),
+                            "people": req.people,
+                            "budget_cents": req.budget_cents,
+                            "scope": "仅机票与酒店；餐饮、当地交通和景点费用未计入",
+                            "evidence": evidence.model_dump(),
+                            "days": [],
+                        }
+                    )
         if not options:
-            raise ValueError("预算不足")
-        return {"options": options}
+            raise ValueError("预算不足，请提高预算或调整需求")
+        return {"options": sorted(options, key=lambda o: o["amount"])}
+
+    def validate_plan(self, req, draft, design, run_id):
+        feasible = {frozenset(o["resource_ids"]): o for o in draft["options"]}
+        output, used = [], set()
+        for selected in design.options:
+            pair = frozenset(selected.resource_ids)
+            if pair not in feasible or pair in used:
+                raise ValueError("规划结果不在可行组合中或重复")
+            used.add(pair)
+            option = dict(feasible[pair])
+            ids = {e["node_id"] for e in option["evidence"]["evidence"]}
+            dates = set()
+            for day in selected.days:
+                if not req.start <= day.date < req.end or day.date in dates:
+                    raise ValueError("规划活动日期越界或重复")
+                if not day.evidence_ids or not set(day.evidence_ids) <= ids:
+                    raise ValueError("规划活动缺少有效知识出处")
+                dates.add(day.date)
+            option.update(
+                option_id=f"{run_id}:{len(output) + 1}",
+                label=selected.label,
+                explanation=selected.explanation,
+                days=[d.model_dump(mode="json") for d in selected.days],
+            )
+            output.append(option)
+        return {"options": output}
 
     def _apply_content(self, s, owner, p, action):
-        """只能由已批准提案执行；数据库变更和 Operation 同事务提交。"""
         kind, data = action["kind"], action["data"]
         if kind == "plan_create":
             plan = Plan(id=p.id, owner=owner, options=data["options"])
@@ -526,6 +695,24 @@ class Domain:
             case = Case(id=p.id, owner=owner, request_id=p.id, context=data)
             s.add(case)
             return {"status": "SUCCESS", "case_id": p.id}
+        if kind == "case_message":
+            case = s.scalar(
+                select(Case)
+                .where(Case.id == data["request"]["case_id"])
+                .with_for_update()
+            )
+            if not case or case.owner != owner or case.status == "CLOSED":
+                raise ValueError("服务申请不存在或已经结束")
+            case.replies = [
+                *case.replies,
+                {
+                    "by": owner,
+                    "role": "user",
+                    "text": data["request"]["question"],
+                    "at": now(),
+                },
+            ]
+            return {"status": "SUCCESS", "case_id": case.id}
         if kind == "repair_save":
             original = s.scalar(
                 select(Plan).where(Plan.id == data["plan_id"]).with_for_update()
@@ -536,7 +723,6 @@ class Domain:
                 or original.options != data["report"]["diff"]["before"]
             ):
                 raise ValueError("原行程已变化，请重新研究并确认")
-            # ID 来自服务端，目录由服务端构造；原子替换且路径固定，重试不增副本。
             folder = settings().artifact_dir / owner / p.id
             folder.mkdir(parents=True, exist_ok=True)
             temporary = folder / "report.pending"
@@ -576,11 +762,13 @@ class Domain:
             return {"status": "SUCCESS", "case_id": case.id, "case_status": case.status}
         if change == "knowledge_import":
             content = base64.b64decode(data["content_base64"], validate=True)
-            folder = settings().artifact_dir / "imports"
-            folder.mkdir(parents=True, exist_ok=True)
-            path = folder / (
-                hashlib.sha256(content).hexdigest() + Path(data["name"]).suffix
+            folder = (
+                settings().artifact_dir
+                / "imports"
+                / hashlib.sha256(content).hexdigest()
             )
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / data["name"]
             path.write_bytes(content)
             result = self.knowledge.import_document(path, data["metadata"])
         else:
